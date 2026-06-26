@@ -2,6 +2,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Set
+from logger import log_exception
 
 logger = logging.getLogger("fb_downloader")
 
@@ -25,6 +26,14 @@ class DuplicateChecker:
         if url_stripped in self.active_urls:
             self.active_urls.remove(url_stripped)
 
+    def _write_empty_log(self) -> None:
+        """Khởi tạo file log rỗng khi file bị hỏng."""
+        try:
+            with open(self.log_file, "w", encoding="utf-8") as f:
+                json.dump([], f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            logger.error(f"Cannot recreate empty download log file: {e}")
+
     def is_duplicate(self, url: str) -> bool:
         """
         Kiểm tra xem URL đã trùng lặp hay chưa.
@@ -43,20 +52,28 @@ class DuplicateChecker:
 
         # 2. Kiểm tra trùng trong lịch sử download_log.json
         if self.log_file.exists():
+            logs = []
             try:
-                with open(self.log_file, "r", encoding="utf-8") as f:
-                    logs = json.load(f)
-                
-                # Quét ngược từ dưới lên để lấy bản ghi mới nhất trước
-                for entry in reversed(logs):
-                    if entry.get("url") == url and entry.get("status") == "done":
-                        file_path_str = entry.get("file_path")
-                        if file_path_str:
-                            file_path = Path(file_path_str)
-                            # Chỉ coi là trùng nếu file video vật lý vẫn thực sự tồn tại
-                            if file_path.exists():
-                                return True
+                # Nếu file trống, tự phục hồi lại mảng rỗng
+                if self.log_file.stat().st_size == 0:
+                    self._write_empty_log()
+                else:
+                    with open(self.log_file, "r", encoding="utf-8") as f:
+                        logs = json.load(f)
+            except (json.JSONDecodeError, IOError):
+                logger.warning("Download log JSON is corrupted. Re-creating empty log...")
+                self._write_empty_log()
             except Exception as e:
-                logger.error(f"Error reading download log for duplicate check: {e}")
+                log_exception(logger, "Unexpected error reading download log for duplicate check", e)
+            
+            # Quét ngược từ dưới lên để lấy bản ghi mới nhất trước
+            for entry in reversed(logs):
+                if entry.get("url") == url and entry.get("status") == "done":
+                    file_path_str = entry.get("file_path")
+                    if file_path_str:
+                        file_path = Path(file_path_str)
+                        # Chỉ coi là trùng nếu file video vật lý vẫn thực sự tồn tại
+                        if file_path.exists():
+                            return True
 
         return False

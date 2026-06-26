@@ -245,10 +245,15 @@ def save_log(results: List[VideoInfo]):
     existing = []
     if log_path.exists():
         try:
-            with open(log_path, encoding="utf-8") as f:
-                existing = json.load(f)
+            if log_path.stat().st_size == 0:
+                with open(log_path, "w", encoding="utf-8") as f:
+                    json.dump([], f, ensure_ascii=False, indent=2)
+            else:
+                with open(log_path, encoding="utf-8") as f:
+                    existing = json.load(f)
         except Exception as e:
-            log_exception(logger, "Error reading existing log", e)
+            log_exception(logger, "Error reading existing log, resetting to empty list", e)
+            existing = []
 
     # Gộp và lưu
     all_results = existing + [asdict(r) for r in results]
