@@ -43,10 +43,51 @@ class VideoInfo:
 
 
 # ─────────────────────────────────────────────
+# COOKIE CONVERTER HELPER
+# ─────────────────────────────────────────────
+def check_and_convert_cookies(cookies_path: Path):
+    """Kiểm tra và tự động chuyển đổi cookie thô dạng string sang Netscape format nếu cần."""
+    if not cookies_path.exists():
+        return
+    try:
+        with open(cookies_path, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+        
+        # Nếu content không bắt đầu bằng Netscape header và trông giống chuỗi cookie thô
+        if not content.startswith("# HTTP Cookie File") and not content.startswith("# Netscape") and ";" in content and "=" in content:
+            logger.info("Phát hiện cookie dạng chuỗi thô. Đang tự động chuyển đổi sang Netscape format...")
+            
+            # Tách các cặp key-value
+            pairs = [p.strip() for p in content.split(";") if "=" in p]
+            netscape_lines = [
+                "# Netscape HTTP Cookie File",
+                "# This file was automatically converted from raw cookie string.",
+                ""
+            ]
+            for pair in pairs:
+                parts = pair.split("=", 1)
+                name = parts[0].strip()
+                val = parts[1].strip()
+                # Thêm vào Netscape format
+                netscape_lines.append(f".facebook.com\tTRUE\t/\tTRUE\t2000000000\t{name}\t{val}")
+            
+            # Ghi đè lại file cookies.txt
+            with open(cookies_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(netscape_lines) + "\n")
+            logger.info("Chuyển đổi cookie Netscape thành công!")
+    except Exception as e:
+        logger.error(f"Lỗi tự động chuyển đổi cookie: {e}")
+
+
+# ─────────────────────────────────────────────
 # HÀM BUILD OPTIONS cho yt-dlp
 # ─────────────────────────────────────────────
 def build_ydl_opts(output_path: Path, quiet: bool = True) -> dict:
     """Tạo cấu hình yt-dlp tối ưu cho Facebook."""
+    
+    # Tự động convert cookies nếu là định dạng raw text
+    cookies_path = Path(COOKIES_FILE)
+    check_and_convert_cookies(cookies_path)
     
     # Format chất lượng
     if VIDEO_QUALITY == "best":
@@ -81,11 +122,11 @@ def build_ydl_opts(output_path: Path, quiet: bool = True) -> dict:
     }
 
     # Thêm cookies nếu có
-    if COOKIES_FILE.exists() if isinstance(COOKIES_FILE, Path) else os.path.exists(COOKIES_FILE):
-        opts["cookiefile"] = str(COOKIES_FILE)
-        console.print(f"[green]✓ Dùng cookies từ file:[/] {COOKIES_FILE}")
+    if cookies_path.exists():
+        opts["cookiefile"] = str(cookies_path)
+        console.print(f"[green]✓ Dùng cookies từ file:[/] {cookies_path}")
     else:
-        console.print(f"[yellow]⚠ Không tìm thấy {COOKIES_FILE}, download không cần đăng nhập[/]")
+        console.print(f"[yellow]⚠ Không tìm thấy {cookies_path}, download không cần đăng nhập[/]")
 
     return opts
 
