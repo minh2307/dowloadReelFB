@@ -2,11 +2,47 @@ import time
 import logging
 import shutil
 import threading
+from pathlib import Path
 from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
-from config import CHROME_CDP_URL, CHROME_PROFILE_DIR
+from config import CHROME_CDP_URL, CHROME_PROFILE_DIR, COOKIES_FILE
 from logger import log_exception
 
 logger = logging.getLogger("fb_downloader")
+
+def parse_netscape_cookies(cookies_path: Path) -> list:
+    """Đọc tệp Netscape cookies.txt và chuyển thành danh sách dạng dict cho Playwright."""
+    cookies = []
+    if not cookies_path.exists():
+        return cookies
+    try:
+        with open(cookies_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split("\t")
+                if len(parts) >= 7:
+                    domain = parts[0]
+                    # Playwright yêu cầu định dạng domain chuẩn
+                    path = parts[2]
+                    secure = parts[3].upper() == "TRUE"
+                    try:
+                        expires = float(parts[4])
+                    except:
+                        expires = time.time() + 86400 * 30
+                    name = parts[5]
+                    value = parts[6]
+                    cookies.append({
+                        "name": name,
+                        "value": value,
+                        "domain": domain,
+                        "path": path,
+                        "secure": secure,
+                        "expires": expires
+                    })
+    except Exception as e:
+        logger.error(f"Error parsing Netscape cookies for Playwright: {e}")
+    return cookies
 
 class BrowserManager:
     """
@@ -32,6 +68,23 @@ class BrowserManager:
         self.context: BrowserContext = None
         self._lock = threading.Lock()
         self._initialized = True
+
+    def _inject_cookies_if_any(self):
+        """Đồng bộ cookie từ file cookies.txt vào Playwright Context."""
+        if not self.context:
+            return
+        try:
+            cookies_path = Path(COOKIES_FILE)
+            # Tự động convert cookies thô trước khi nạp nếu có
+            from download_manager import check_and_convert_cookies
+            check_and_convert_cookies(cookies_path)
+            
+            parsed_cookies = parse_netscape_cookies(cookies_path)
+            if parsed_cookies:
+                self.context.add_cookies(parsed_cookies)
+                logger.info(f"Loaded {len(parsed_cookies)} cookies into Browser Context successfully.")
+        except Exception as e:
+            logger.warning(f"Failed to load cookies into Browser Context: {e}")
 
     def start(self) -> bool:
         """
@@ -61,6 +114,7 @@ class BrowserManager:
                 else:
                     self.context = self.browser.new_context()
                 logger.info("Connected to Chrome via CDP successfully.")
+                self._inject_cookies_if_any()
                 return True
             except Exception as cdp_err:
                 logger.warning(f"CDP connection refused/failed ({cdp_err}). Falling back to launching local Chrome...")
@@ -84,6 +138,7 @@ class BrowserManager:
                     )
                     self.browser = self.context.browser
                     logger.info("Launched local Chrome instance with persistent context successfully.")
+                    self._inject_cookies_if_any()
                     return True
                 except Exception as launch_err:
                     log_exception(logger, "Failed to launch local Chrome instance too", launch_err)
