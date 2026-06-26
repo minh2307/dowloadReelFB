@@ -20,3 +20,5 @@ metadata.json
 # Credentials and Config
 .env
 cookies.txt
+
+promt.md 

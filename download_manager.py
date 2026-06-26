@@ -16,24 +16,15 @@ from rich.progress import (
 )
 from rich.table import Table
 from rich.panel import Panel
-from dotenv import load_dotenv
 
 from metadata_manager import MetadataManager
-
-# Load biến môi trường
-load_dotenv()
-
-# ─────────────────────────────────────────────
-# CẤU HÌNH
-# ─────────────────────────────────────────────
-OUTPUT_DIR   = Path(os.getenv("OUTPUT_DIR", "downloads"))
-COOKIES_FILE = os.getenv("FB_COOKIES_FILE", "cookies.txt")
-USER_AGENT   = os.getenv("USER_AGENT", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")
-VIDEO_QUALITY = os.getenv("VIDEO_QUALITY", "best")
-MAX_WORKERS  = int(os.getenv("MAX_WORKERS", "2"))
-LOG_FILE     = "download_log.json"
+from config import (
+    OUTPUT_DIR, COOKIES_FILE, USER_AGENT, VIDEO_QUALITY, MAX_WORKERS, DOWNLOAD_LOG_JSON
+)
+from logger import log_exception
 
 console = Console()
+logger = logging.getLogger("fb_downloader")
 
 # ─────────────────────────────────────────────
 # DATA CLASS
@@ -52,23 +43,6 @@ class VideoInfo:
 
 
 # ─────────────────────────────────────────────
-# LOGGER
-# ─────────────────────────────────────────────
-def setup_logger() -> logging.Logger:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler("downloader.log", encoding="utf-8"),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return logging.getLogger("fb_downloader")
-
-logger = setup_logger()
-
-
-# ─────────────────────────────────────────────
 # HÀM BUILD OPTIONS cho yt-dlp
 # ─────────────────────────────────────────────
 def build_ydl_opts(output_path: Path, quiet: bool = True) -> dict:
@@ -79,6 +53,8 @@ def build_ydl_opts(output_path: Path, quiet: bool = True) -> dict:
         fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
     elif VIDEO_QUALITY == "worst":
         fmt = "worstvideo+worstaudio/worst"
+    elif "/" in str(VIDEO_QUALITY) or "[" in str(VIDEO_QUALITY):
+        fmt = VIDEO_QUALITY
     else:
         fmt = f"bestvideo[height<={VIDEO_QUALITY}][ext=mp4]+bestaudio[ext=m4a]/best[height<={VIDEO_QUALITY}]/best"
 
@@ -105,8 +81,8 @@ def build_ydl_opts(output_path: Path, quiet: bool = True) -> dict:
     }
 
     # Thêm cookies nếu có
-    if os.path.exists(COOKIES_FILE):
-        opts["cookiefile"] = COOKIES_FILE
+    if COOKIES_FILE.exists() if isinstance(COOKIES_FILE, Path) else os.path.exists(COOKIES_FILE):
+        opts["cookiefile"] = str(COOKIES_FILE)
         console.print(f"[green]✓ Dùng cookies từ file:[/] {COOKIES_FILE}")
     else:
         console.print(f"[yellow]⚠ Không tìm thấy {COOKIES_FILE}, download không cần đăng nhập[/]")
@@ -135,7 +111,7 @@ def get_video_info(url: str) -> Optional[VideoInfo]:
                 duration=info.get("duration", 0),
             )
     except Exception as e:
-        logger.error(f"Lỗi lấy info: {url} → {e}")
+        log_exception(logger, f"Lỗi lấy info: {url}", e)
         return VideoInfo(url=url, status="error", error_msg=str(e))
 
 
@@ -196,7 +172,7 @@ def download_single(video: VideoInfo, progress=None, task_id=None, metadata_mgr:
     except Exception as e:
         video.status    = "error"
         video.error_msg = str(e)
-        logger.error(f"✗ Lỗi download {video.url}: {e}")
+        log_exception(logger, f"✗ Lỗi download {video.url}", e)
 
     return video
 
@@ -263,7 +239,7 @@ def download_batch(urls: List[str], max_workers: int = MAX_WORKERS, metadata_mgr
 # ─────────────────────────────────────────────
 def save_log(results: List[VideoInfo]):
     """Lưu kết quả download vào file JSON."""
-    log_path = Path(LOG_FILE)
+    log_path = Path(DOWNLOAD_LOG_JSON)
 
     # Đọc log cũ nếu có
     existing = []
@@ -271,8 +247,8 @@ def save_log(results: List[VideoInfo]):
         try:
             with open(log_path, encoding="utf-8") as f:
                 existing = json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            log_exception(logger, "Error reading existing log", e)
 
     # Gộp và lưu
     all_results = existing + [asdict(r) for r in results]

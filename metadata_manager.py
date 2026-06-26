@@ -5,6 +5,9 @@ from datetime import datetime
 import threading
 from typing import List, Dict, Any
 
+from config import METADATA_FILE
+from logger import log_exception
+
 logger = logging.getLogger("fb_downloader")
 
 class MetadataManager:
@@ -13,7 +16,7 @@ class MetadataManager:
     Đảm bảo an toàn luồng (thread-safe) và tự động tạo lại nếu file bị hỏng hoặc mất.
     """
     
-    def __init__(self, filepath: str = "metadata.json"):
+    def __init__(self, filepath: str = METADATA_FILE):
         self.filepath = Path(filepath)
         self._lock = threading.Lock()
         self._ensure_file_exists()
@@ -27,7 +30,7 @@ class MetadataManager:
                 try:
                     with open(self.filepath, "r", encoding="utf-8") as f:
                         json.load(f)
-                except (json.JSONDecodeError, IOError):
+                except (json.JSONDecodeError, IOError) as e:
                     logger.warning("Metadata file is corrupted. Re-creating...")
                     self._write_empty_metadata()
 
@@ -38,7 +41,7 @@ class MetadataManager:
                 json.dump([], f, ensure_ascii=False, indent=4)
             logger.info("Metadata updated")
         except IOError as e:
-            logger.error(f"Cannot create metadata file: {e}")
+            log_exception(logger, "Cannot create metadata file", e)
 
     def load(self) -> List[Dict[str, Any]]:
         """Đọc danh sách metadata từ file."""
@@ -48,7 +51,7 @@ class MetadataManager:
                 with open(self.filepath, "r", encoding="utf-8") as f:
                     return json.load(f)
             except Exception as e:
-                logger.error(f"Error loading metadata: {e}")
+                log_exception(logger, "Error loading metadata", e)
                 return []
 
     def save(self, data: List[Dict[str, Any]]) -> None:
@@ -59,7 +62,7 @@ class MetadataManager:
                     json.dump(data, f, ensure_ascii=False, indent=4)
                 logger.info("Metadata updated")
             except Exception as e:
-                logger.error(f"Error saving metadata: {e}")
+                log_exception(logger, "Error saving metadata", e)
 
     def add_record(self, filename: str, download_time: str = None) -> None:
         """Thêm một record mới vào metadata."""

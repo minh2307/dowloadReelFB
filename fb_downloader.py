@@ -29,18 +29,21 @@ from cleanup_manager import CleanupManager
 from reel_validator import is_facebook_reel
 from clipboard_monitor import ClipboardMonitor
 from duplicate_checker import DuplicateChecker
+from browser_manager import BrowserManager
+from scraper import ReelScraper
+from logger import log_exception
 import download_manager
 from download_manager import (
     VideoInfo, build_ydl_opts, get_video_info, download_single,
     download_batch, save_log, print_report, OUTPUT_DIR, COOKIES_FILE,
-    USER_AGENT, VIDEO_QUALITY, MAX_WORKERS, LOG_FILE, console, logger
+    USER_AGENT, VIDEO_QUALITY, MAX_WORKERS, DOWNLOAD_LOG_JSON, console, logger
 )
 
 # Danh sách lưu trữ kết quả download trong phiên làm việc hiện tại
 all_results: List[VideoInfo] = []
 all_results_lock = threading.Lock()
 metadata_mgr = MetadataManager()
-duplicate_checker = DuplicateChecker(LOG_FILE)
+duplicate_checker = DuplicateChecker(DOWNLOAD_LOG_JSON)
 
 def process_and_download_reel(url: str, progress=None, task_id=None) -> VideoInfo:
     """
@@ -52,10 +55,7 @@ def process_and_download_reel(url: str, progress=None, task_id=None) -> VideoInf
     5. Saving metadata
     6. Completed
     """
-    logger.info("Opening Reel")
-    
     # Khởi tạo scraper
-    from reel_scraper import ReelScraper
     scraper = ReelScraper()
     
     # Tiến hành tải video
@@ -65,8 +65,8 @@ def process_and_download_reel(url: str, progress=None, task_id=None) -> VideoInf
     
     if result.status == "done" and result.file_path:
         # Trích xuất caption & comments qua Playwright CDP
-        # Log "Extracting caption" và "Loading comments" nằm trong scraper.scrape_reel()
-        scrape_data = scraper.scrape_reel(url)
+        # Log "Extracting caption" và "Loading comments" nằm bên trong scraper.scrape()
+        scrape_data = scraper.scrape(url)
         
         # Lưu metadata dạng JSON cùng tên với file video
         logger.info("Saving metadata")
@@ -83,7 +83,7 @@ def process_and_download_reel(url: str, progress=None, task_id=None) -> VideoInf
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(metadata_payload, f, ensure_ascii=False, indent=4)
         except Exception as e:
-            logger.error(f"Error saving video metadata JSON: {e}")
+            log_exception(logger, "Error saving video metadata JSON", e)
             
         logger.info("Completed")
     else:
@@ -134,12 +134,14 @@ def main():
         title="[bold cyan]Chạy Vô Hạn & Giám Sát Clipboard[/]",
     ))
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    # 1. Khởi chạy Browser Manager kết nối tới Chrome
+    browser_mgr = BrowserManager()
+    browser_mgr.start()
 
-    # 1. Tự động quét dọn file quá 24h khi khởi động chương trình
+    # 2. Tự động quét dọn file quá 24h khi khởi động chương trình
     CleanupManager.cleanup(OUTPUT_DIR, metadata_mgr)
 
-    # 2. Khởi chạy Clipboard monitor ở background thread
+    # 3. Khởi chạy Clipboard monitor ở background thread
     monitor = ClipboardMonitor(callback=on_clipboard_reel_detected, duplicate_checker=duplicate_checker, interval_seconds=0.5)
     monitor.start()
 
@@ -206,6 +208,9 @@ def main():
     finally:
         if 'monitor' in locals():
             monitor.stop()
+        
+        # Đóng kết nối Browser Manager
+        BrowserManager().stop()
 
         # In báo cáo & lưu log
         with all_results_lock:

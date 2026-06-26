@@ -1,110 +1,268 @@
-# Nâng cấp chương trình tải Facebook Reel
+# Nhiệm vụ: Phân tích và sửa triệt để chương trình tải Facebook Reel
 
-Bạn là Senior Python Automation Engineer, chuyên về Playwright và Browser Automation.
+Bạn là Senior Python Software Engineer với hơn 10 năm kinh nghiệm về:
 
-Tôi đã có chương trình tải Facebook Reel bằng Chrome (Playwright kết nối với Chrome thông qua Remote Debugging). Hãy bổ sung chức năng **thu thập tiêu đề (caption)** và **toàn bộ bình luận** của Reel mà **không làm thay đổi chức năng tải video hiện có**.
+* Playwright
+* Browser Automation
+* Chrome DevTools Protocol (CDP)
+* Selenium
+* yt-dlp
+* Python Architecture
+* Debugging
 
-## Yêu cầu
+Hiện tại chương trình có các chức năng:
 
-Sau khi tải video thành công:
+* Theo dõi Clipboard.
+* Tự động phát hiện URL Facebook Reel.
+* Tải video bằng yt-dlp.
+* Kết nối Chrome thông qua Playwright CDP.
+* Thu thập Caption và Comment.
 
-### 1. Lấy tiêu đề (Caption)
+Tuy nhiên chương trình hoạt động không ổn định.
 
-Thu thập toàn bộ nội dung bài viết (caption) của Reel.
+## Mục tiêu
 
-Yêu cầu:
+Không vá lỗi tạm thời.
 
-* Giữ nguyên định dạng.
-* Hỗ trợ Unicode và Emoji.
-* Nếu caption bị rút gọn, tự động nhấn **"Xem thêm" (See more)** để lấy đầy đủ nội dung.
-
----
-
-### 2. Lấy toàn bộ bình luận
-
-Tự động thu thập tất cả bình luận mà tài khoản Facebook hiện tại có quyền xem.
-
-Yêu cầu:
-
-* Tự động nhấn **"Xem thêm bình luận"** cho đến khi không còn bình luận mới.
-* Tự động cuộn trang nếu cần để tải thêm bình luận.
-* Không thu thập trùng lặp.
-* Chỉ lưu nội dung bình luận, không cần thông tin người bình luận hoặc số lượt thích.
-
-Ví dụ:
-
-```json
-[
-    "Hay quá!",
-    "Video rất hữu ích.",
-    "Cảm ơn đã chia sẻ.",
-    "Đã lưu lại để xem sau."
-]
-```
+Hãy phân tích toàn bộ source code và **tìm nguyên nhân gốc (Root Cause)** của các lỗi, sau đó refactor để chương trình hoạt động ổn định.
 
 ---
 
-### 3. Lưu dữ liệu
+# Các lỗi hiện tại
 
-Sau khi hoàn thành, tạo một file JSON cùng tên với video.
-
-Ví dụ:
-
-```json
-{
-    "video": "reel_001.mp4",
-    "caption": "Đây là nội dung đầy đủ của Reel...",
-    "comments": [
-        "Hay quá!",
-        "Video rất hữu ích.",
-        "Cảm ơn đã chia sẻ."
-    ]
-}
-```
-
-Mỗi video chỉ có một file JSON tương ứng.
-
----
-
-### 4. Browser
-
-* Sử dụng Chrome hiện tại của tôi thông qua Playwright CDP (Remote Debugging).
-* Không đăng nhập Facebook lại.
-* Chỉ thu thập dữ liệu mà tài khoản hiện tại có quyền truy cập.
-
----
-
-### 5. Logging
-
-Hiển thị log rõ ràng:
+Ví dụ log:
 
 ```text
 Opening Reel
 Downloading video
-Extracting caption
-Loading comments
+Download completed
+Metadata updated
+Opening Reel
+BrowserType.connect_over_cdp:
+connect ECONNREFUSED 127.0.0.1:9222
 Saving metadata
 Completed
 ```
 
----
+Caption không lấy được.
 
-### 6. Code Quality
+Comment không lấy được.
 
-* Không thay đổi logic tải video hiện tại.
-* Tách riêng phần lấy caption và comment thành module độc lập.
-* Sử dụng Type Hint, Logging, Docstring và Exception Handling.
-* Ưu tiên Explicit Wait thay vì `time.sleep()`.
-* Có cơ chế Retry khi Facebook tải nội dung chậm.
+Có lúc Chrome kết nối được.
+
+Có lúc mất kết nối.
 
 ---
 
-## Deliverables
+# Yêu cầu
+
+## 1. Phân tích kiến trúc
+
+Đọc toàn bộ project.
+
+Vẽ sơ đồ luồng hoạt động hiện tại.
+
+Xác định:
+
+* module nào chịu trách nhiệm mở browser
+* module nào đóng browser
+* module nào download video
+* module nào scrape caption
+* module nào scrape comment
+
+Chỉ ra các điểm thiết kế chưa hợp lý.
+
+---
+
+## 2. Root Cause Analysis
+
+Không được đoán.
+
+Đối với mỗi lỗi:
+
+* giải thích nguyên nhân
+* chỉ rõ file
+* chỉ rõ class
+* chỉ rõ function
+* chỉ rõ dòng code gây lỗi
+* giải thích tại sao lỗi xảy ra
+
+Ví dụ:
+
+* connect_over_cdp bị gọi nhiều lần
+* browser bị close quá sớm
+* page bị đóng
+* context bị dispose
+* race condition giữa downloader và scraper
+* retry sai
+* selector lỗi
+* timeout
+* browser lifecycle sai
+
+---
+
+## 3. Browser Lifecycle
+
+Thiết kế lại vòng đời của Browser.
+
+Yêu cầu:
+
+* Browser chỉ khởi tạo một lần.
+* Không connect_over_cdp mỗi lần tải Reel.
+* Dùng Browser Singleton hoặc Browser Manager.
+* Chỉ tạo Page mới cho mỗi Reel.
+* Sau khi hoàn thành chỉ đóng Page.
+* Browser chỉ đóng khi chương trình kết thúc.
+
+Không được đóng Browser giữa các lần tải.
+
+---
+
+## 4. Downloader
+
+Không để yt-dlp ảnh hưởng tới Playwright.
+
+Nếu Downloader chạy riêng process hoặc thread thì đảm bảo:
+
+* không đóng Browser
+* không kill Chrome
+* không reset session
+
+---
+
+## 5. Caption
+
+Refactor hoàn toàn.
+
+Không hardcode selector.
+
+Tự động:
+
+* expand "Xem thêm"
+* thử nhiều selector
+* fallback selector
+* retry
+
+Nếu không tìm thấy:
+
+* dump HTML
+* screenshot
+* log
+
+Không làm crash chương trình.
+
+---
+
+## 6. Comment
+
+Refactor hoàn toàn.
+
+Yêu cầu:
+
+* Scroll động.
+* Click "Xem thêm bình luận".
+* Click "Xem phản hồi".
+* Dừng khi không còn comment mới.
+* Không dùng số vòng lặp cố định.
+* Loại bỏ comment trùng.
+
+---
+
+## 7. Error Handling
+
+Không được dùng:
+
+```python
+except:
+    pass
+```
+
+Mọi exception phải:
+
+* log
+* traceback
+* file
+* function
+* line number
+
+Nếu lỗi scraper:
+
+* chương trình vẫn tiếp tục tải video.
+
+Nếu lỗi downloader:
+
+* scraper vẫn có thể chạy nếu phù hợp.
+
+---
+
+## 8. Logging
+
+Thêm log chi tiết.
+
+Ví dụ:
+
+```text
+Starting Browser Manager
+Connected to Chrome
+Creating Page
+Opening Reel
+Extracting Caption
+Caption Found
+Loading Comments
+Loaded 50 Comments
+Saving Metadata
+Closing Page
+Waiting Clipboard
+```
+
+Nếu lỗi:
+
+```text
+Browser disconnected
+Trying reconnect...
+Reconnect success
+```
+
+---
+
+## 9. Refactor
+
+Thiết kế lại các module:
+
+```text
+browser_manager.py
+clipboard_monitor.py
+download_manager.py
+scraper.py
+caption_scraper.py
+comment_scraper.py
+metadata_manager.py
+logger.py
+config.py
+```
+
+Áp dụng:
+
+* SOLID
+* DRY
+* Dependency Injection
+* Singleton (Browser Manager)
+* Type Hint
+* Docstring
+* Retry
+* Explicit Wait
+
+---
+
+## 10. Deliverables
 
 Hãy trả về:
 
-1. Mã nguồn hoàn chỉnh cho chức năng lấy caption.
-2. Mã nguồn hoàn chỉnh cho chức năng lấy toàn bộ bình luận.
-3. Các thay đổi cần bổ sung vào `main.py`.
-4. Cấu trúc file JSON đầu ra.
-5. Đảm bảo code có thể tích hợp trực tiếp vào dự án hiện tại mà không ảnh hưởng đến chức năng tải video.
+1. Phân tích kiến trúc hiện tại.
+2. Root Cause của từng lỗi.
+3. Danh sách bug.
+4. Kế hoạch refactor.
+5. Mã nguồn hoàn chỉnh cho từng file cần sửa.
+6. Không tạo mã nguồn mới nếu không cần thiết.
+7. Chỉ sửa những phần thực sự có vấn đề.
+8. Đảm bảo chương trình hoạt động ổn định trong thời gian dài mà không bị mất kết nối Chrome hoặc lỗi khi thu thập Caption và Comment.

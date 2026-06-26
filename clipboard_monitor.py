@@ -4,6 +4,7 @@ import logging
 import subprocess
 from typing import Callable, Set
 from reel_validator import is_facebook_reel
+from logger import log_exception
 
 logger = logging.getLogger("fb_downloader")
 
@@ -131,7 +132,7 @@ class ClipboardMonitor(threading.Thread):
                         else:
                             logger.info(f"Duplicate Facebook Reel skipped: {current_content}")
             except Exception as e:
-                logger.error(f"Error in clipboard monitoring loop: {e}")
+                log_exception(logger, "Error in clipboard monitoring loop", e)
             
             time.sleep(self.interval)
 
