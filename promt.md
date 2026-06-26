@@ -1,161 +1,101 @@
-# Nhiệm vụ
+# Nâng cấp chương trình tải Facebook Reel
 
-Bạn là Senior Python Developer.
+Bạn là Senior Python Automation Engineer, chuyên về Playwright và Browser Automation.
 
-Hãy nâng cấp chương trình tải Facebook Reel hiện tại mà **không làm thay đổi các chức năng đang hoạt động**.
+Tôi đã có chương trình tải Facebook Reel bằng Chrome (Playwright kết nối với Chrome thông qua Remote Debugging). Hãy bổ sung chức năng **thu thập tiêu đề (caption)** và **toàn bộ bình luận** của Reel mà **không làm thay đổi chức năng tải video hiện có**.
 
-## Chức năng 1: Theo dõi Clipboard
-
-Thêm một background worker để theo dõi Clipboard của hệ điều hành.
-
-Yêu cầu:
-
-* Kiểm tra clipboard mỗi 500ms (hoặc 1 giây).
-* Chỉ xử lý khi nội dung clipboard thay đổi.
-* Nếu clipboard chứa URL Facebook Reel hợp lệ thì:
-
-  * Tự động bắt đầu tải.
-  * Không cần người dùng bấm nút Download.
-* Không tải lại cùng một URL nếu URL đó vừa được xử lý.
-* Không ảnh hưởng tới hiệu năng chương trình.
-
-Các dạng URL cần hỗ trợ:
-
-```
-https://www.facebook.com/reel/...
-https://fb.watch/...
-https://www.facebook.com/share/r/...
-https://m.facebook.com/reel/...
-```
-
-Nếu URL không phải Reel thì bỏ qua.
-
----
-
-## Chức năng 2: Kiểm tra URL Reel
-
-Viết hàm riêng:
-
-```python
-is_facebook_reel(url: str) -> bool
-```
-
-Yêu cầu:
-
-* Validate URL.
-* Dùng regex hoặc urllib.parse.
-* Trả về True nếu là Reel.
-* False nếu không phải.
-
-Không được hardcode theo đúng một mẫu URL.
-
----
-
-## Chức năng 3: Tự động xóa Reel cũ
+## Yêu cầu
 
 Sau khi tải video thành công:
 
-* Lưu thời gian tải của video.
-* Mỗi lần chương trình khởi động:
+### 1. Lấy tiêu đề (Caption)
 
-  * Quét thư mục Download.
-  * Nếu file video đã tồn tại hơn 24 giờ thì tự động xóa.
-* Chỉ xóa:
+Thu thập toàn bộ nội dung bài viết (caption) của Reel.
 
-  * mp4
-  * mkv
-  * webm
+Yêu cầu:
 
-Không xóa các file khác.
+* Giữ nguyên định dạng.
+* Hỗ trợ Unicode và Emoji.
+* Nếu caption bị rút gọn, tự động nhấn **"Xem thêm" (See more)** để lấy đầy đủ nội dung.
 
 ---
 
-## Chức năng 4: Metadata
+### 2. Lấy toàn bộ bình luận
 
-Tạo file metadata dạng JSON:
+Tự động thu thập tất cả bình luận mà tài khoản Facebook hiện tại có quyền xem.
+
+Yêu cầu:
+
+* Tự động nhấn **"Xem thêm bình luận"** cho đến khi không còn bình luận mới.
+* Tự động cuộn trang nếu cần để tải thêm bình luận.
+* Không thu thập trùng lặp.
+* Chỉ lưu nội dung bình luận, không cần thông tin người bình luận hoặc số lượt thích.
+
+Ví dụ:
 
 ```json
 [
-    {
-        "filename":"abc.mp4",
-        "download_time":"2026-06-26T10:30:00"
-    }
+    "Hay quá!",
+    "Video rất hữu ích.",
+    "Cảm ơn đã chia sẻ.",
+    "Đã lưu lại để xem sau."
 ]
 ```
 
-Mỗi lần tải thành công:
+---
 
-* cập nhật metadata.
+### 3. Lưu dữ liệu
 
-Khi xóa file:
+Sau khi hoàn thành, tạo một file JSON cùng tên với video.
 
-* cũng xóa record trong metadata.
+Ví dụ:
 
-Nếu metadata bị mất:
+```json
+{
+    "video": "reel_001.mp4",
+    "caption": "Đây là nội dung đầy đủ của Reel...",
+    "comments": [
+        "Hay quá!",
+        "Video rất hữu ích.",
+        "Cảm ơn đã chia sẻ."
+    ]
+}
+```
 
-* tự tạo lại.
+Mỗi video chỉ có một file JSON tương ứng.
 
 ---
 
-## Chức năng 5: Threading
+### 4. Browser
 
-Việc theo dõi clipboard phải chạy ở background thread.
-
-Không được block UI.
-
-Nếu chương trình đang tải video:
-
-* clipboard watcher vẫn hoạt động.
+* Sử dụng Chrome hiện tại của tôi thông qua Playwright CDP (Remote Debugging).
+* Không đăng nhập Facebook lại.
+* Chỉ thu thập dữ liệu mà tài khoản hiện tại có quyền truy cập.
 
 ---
 
-## Chức năng 6: Logging
+### 5. Logging
 
-Thêm log:
+Hiển thị log rõ ràng:
 
-```
-Clipboard changed
-Facebook Reel detected
-Start downloading...
-Download completed
-Delete expired reel
-Metadata updated
+```text
+Opening Reel
+Downloading video
+Extracting caption
+Loading comments
+Saving metadata
+Completed
 ```
 
 ---
 
-## Chức năng 7: Clean Code
+### 6. Code Quality
 
-Yêu cầu refactor thành các module:
-
-```
-clipboard_monitor.py
-reel_validator.py
-download_manager.py
-cleanup_manager.py
-metadata_manager.py
-```
-
-Không viết toàn bộ logic trong một file.
-
-Áp dụng:
-
-* SOLID
-* DRY
-* Type Hint
-* Docstring
-* Exception Handling
-* Logging
-
----
-
-## Chức năng 8: Không phá vỡ code cũ
-
-Không sửa logic download hiện tại.
-
-Chỉ bổ sung các chức năng mới.
-
-Nếu cần thay đổi thì phải tương thích ngược (backward compatible).
+* Không thay đổi logic tải video hiện tại.
+* Tách riêng phần lấy caption và comment thành module độc lập.
+* Sử dụng Type Hint, Logging, Docstring và Exception Handling.
+* Ưu tiên Explicit Wait thay vì `time.sleep()`.
+* Có cơ chế Retry khi Facebook tải nội dung chậm.
 
 ---
 
@@ -163,10 +103,8 @@ Nếu cần thay đổi thì phải tương thích ngược (backward compatible
 
 Hãy trả về:
 
-1. Kiến trúc thư mục sau khi refactor.
-2. Giải thích ngắn gọn luồng hoạt động.
-3. Mã nguồn hoàn chỉnh cho từng file mới.
-4. Các thay đổi cần thực hiện trong file main.
-5. Hướng dẫn chạy chương trình.
-6. Giải thích vì sao lựa chọn cách triển khai này thay vì các phương án khác.
-7. Đảm bảo code có thể chạy ngay sau khi copy vào dự án hiện tại.
+1. Mã nguồn hoàn chỉnh cho chức năng lấy caption.
+2. Mã nguồn hoàn chỉnh cho chức năng lấy toàn bộ bình luận.
+3. Các thay đổi cần bổ sung vào `main.py`.
+4. Cấu trúc file JSON đầu ra.
+5. Đảm bảo code có thể tích hợp trực tiếp vào dự án hiện tại mà không ảnh hưởng đến chức năng tải video.

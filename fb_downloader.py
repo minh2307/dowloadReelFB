@@ -42,17 +42,61 @@ all_results_lock = threading.Lock()
 metadata_mgr = MetadataManager()
 duplicate_checker = DuplicateChecker(LOG_FILE)
 
+def process_and_download_reel(url: str, progress=None, task_id=None) -> VideoInfo:
+    """
+    Điều phối toàn bộ quá trình:
+    1. Opening Reel
+    2. Downloading video
+    3. Extracting caption
+    4. Loading comments
+    5. Saving metadata
+    6. Completed
+    """
+    logger.info("Opening Reel")
+    
+    # Khởi tạo scraper
+    from reel_scraper import ReelScraper
+    scraper = ReelScraper()
+    
+    # Tiến hành tải video
+    logger.info("Downloading video")
+    video = VideoInfo(url=url)
+    result = download_single(video, progress, task_id, metadata_mgr=metadata_mgr)
+    
+    if result.status == "done" and result.file_path:
+        # Trích xuất caption & comments qua Playwright CDP
+        # Log "Extracting caption" và "Loading comments" nằm trong scraper.scrape_reel()
+        scrape_data = scraper.scrape_reel(url)
+        
+        # Lưu metadata dạng JSON cùng tên với file video
+        logger.info("Saving metadata")
+        file_path_obj = Path(result.file_path)
+        json_path = file_path_obj.with_suffix(".json")
+        
+        metadata_payload = {
+            "video": file_path_obj.name,
+            "caption": scrape_data.get("caption", ""),
+            "comments": scrape_data.get("comments", [])
+        }
+        
+        try:
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(metadata_payload, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            logger.error(f"Error saving video metadata JSON: {e}")
+            
+        logger.info("Completed")
+    else:
+        logger.error("Downloading video failed or file path not found. Skipping metadata extraction.")
+        
+    return result
+
 def on_clipboard_reel_detected(url: str):
     """Callback xử lý khi phát hiện URL Facebook Reel hợp lệ từ clipboard."""
-    video = VideoInfo(url=url)
-    
     console.print(f"\n[bold green]📋 Phát hiện Reel từ Clipboard, tự động tải xuống:[/] [cyan]{url}[/]")
     
-    # download_single sẽ tự động ghi log:
-    # - "Start downloading..."
-    # - "Download completed"
-    # - và thêm record vào metadata (làm tăng log "Metadata updated")
-    result = download_single(video, metadata_mgr=metadata_mgr)
+    # Gọi hàm điều phối tải video & cào metadata
+    result = process_and_download_reel(url)
     
     # Ghi nhận kết quả
     with all_results_lock:
@@ -126,7 +170,6 @@ def main():
 
             # ── Thực hiện tải video thủ công ─────────────────
             console.print(f"[cyan]  ⬇  Đang download...[/]")
-            video = VideoInfo(url=url)
 
             with Progress(
                 SpinnerColumn(),
@@ -138,7 +181,7 @@ def main():
                 transient=True,
             ) as progress:
                 task_id = progress.add_task("[yellow]Đang tải...", total=100)
-                result  = download_single(video, progress, task_id, metadata_mgr)
+                result  = process_and_download_reel(url, progress, task_id)
 
             if result.status == "done":
                 console.print(
