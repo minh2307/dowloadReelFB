@@ -95,7 +95,7 @@ class ReelScraper:
             page.wait_for_timeout(1000)
             
             # Trích xuất caption bằng selector linh hoạt
-            caption = page.evaluate("""() => {
+            caption = page.evaluate(r"""() => {
                 let captionText = "";
                 
                 // Thử tìm thẻ h2 của Reels và tìm span dir="auto" anh em
@@ -185,7 +185,7 @@ class ReelScraper:
                 page.wait_for_timeout(1500)
                 
                 # 3. Đếm số lượng bình luận hiện có để kiểm tra điểm dừng
-                current_count = page.evaluate("""() => {
+                current_count = page.evaluate(r"""() => {
                     const profileLinks = Array.from(document.querySelectorAll('a[href*="facebook.com/"], a[role="link"]'))
                         .filter(a => {
                             const name = a.innerText.trim();
@@ -213,7 +213,7 @@ class ReelScraper:
     def _extract_comments(self, page) -> List[str]:
         """Thu thập nội dung các bình luận, loại bỏ trùng lặp và lọc thông tin thừa."""
         try:
-            comments = page.evaluate("""() => {
+            comments = page.evaluate(r"""() => {
                 const results = [];
                 
                 // Lấy tất cả các profile links để định vị comment
