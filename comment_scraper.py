@@ -11,6 +11,35 @@ class CommentScraper:
     @staticmethod
     def scrape(page: Page, timeout_seconds: int = 45) -> list:
         logger.info("Loading Comments")
+        
+        # 0. Click mở Sidebar bình luận nếu nó đang bị ẩn
+        try:
+            comment_triggers = [
+                'div[aria-label*="bình luận" i]',
+                'div[aria-label*="comment" i]',
+                'div[aria-label*="Comments" i]',
+                'div[role="button"]:has-text("bình luận")',
+                'div[role="button"]:has-text("comment")',
+                'span:has-text("bình luận")',
+                'span:has-text("comment")'
+            ]
+            for trigger in comment_triggers:
+                loc = page.locator(trigger)
+                count = loc.count()
+                clicked_trigger = False
+                for i in range(count):
+                    btn = loc.nth(i)
+                    if btn.is_visible():
+                        btn.click(timeout=2000)
+                        logger.info(f"Clicked comments panel toggle button using selector: {trigger}")
+                        page.wait_for_timeout(1000)
+                        clicked_trigger = True
+                        break
+                if clicked_trigger:
+                    break
+        except Exception as e:
+            logger.debug(f"Optional comments toggle click failed or not needed: {e}")
+
         start_time = time.time()
         last_comment_count = 0
         no_change_count = 0
@@ -63,7 +92,7 @@ class CommentScraper:
                                    !/^\d+\s*(giờ|phút|ngày|tuần|tháng|năm|hr|min|day|week|mon|ago)/i.test(name) && 
                                    !/^https?:\/\//.test(name) &&
                                    !/(Thích|Like|Phản hồi|Reply|Chia sẻ|Share)/i.test(name);
-                        });
+                         });
                     return profileLinks.length;
                 }""")
                 

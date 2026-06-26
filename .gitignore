@@ -21,4 +21,7 @@ metadata.json
 .env
 cookies.txt
 
+# Chrome debug profiles
+chrome_debug_profile/
+
 promt.md 
