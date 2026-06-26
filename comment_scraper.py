@@ -63,19 +63,25 @@ class CommentScraper:
                     return clicked;
                 }""")
                 
-                # 2. Cuộn trang hoặc cuộn sidebar bình luận xuống cuối cùng
+                # 2. Chỉ cuộn các div chứa bình luận ở góc bên phải, KHÔNG cuộn window chính
                 page.evaluate(r"""() => {
-                    // Cuộn window chính
-                    window.scrollBy(0, 800);
+                    // Tìm tất cả các div cuộn được đang hiển thị
+                    const divs = Array.from(document.querySelectorAll('div'));
+                    const scrollableDivs = divs.filter(div => {
+                        const style = window.getComputedStyle(div);
+                        const hasScrollableOverflow = style.overflowY === 'auto' || style.overflowY === 'scroll';
+                        const isVisible = div.offsetWidth > 0 && div.offsetHeight > 0;
+                        return hasScrollableOverflow && isVisible && div.scrollHeight > div.clientHeight;
+                    });
                     
-                    // Cuộn các div sidebar có thuộc tính cuộn
-                    const scrollableDivs = Array.from(document.querySelectorAll('div'))
-                        .filter(div => {
-                            const style = window.getComputedStyle(div);
-                            return (style.overflowY === 'auto' || style.overflowY === 'scroll') && div.scrollHeight > div.clientHeight;
-                        });
-                        
-                    scrollableDivs.forEach(div => {
+                    // Ưu tiên cuộn các div nằm ở nửa bên phải màn hình (thường là sidebar bình luận)
+                    const rightSideDivs = scrollableDivs.filter(div => {
+                        const rect = div.getBoundingClientRect();
+                        return rect.left > (window.innerWidth / 2);
+                    });
+                    
+                    const targets = rightSideDivs.length > 0 ? rightSideDivs : scrollableDivs;
+                    targets.forEach(div => {
                         div.scrollTop = div.scrollHeight;
                     });
                 }""")
