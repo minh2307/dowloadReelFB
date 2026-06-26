@@ -1,15 +1,16 @@
 import time
 import logging
+import shutil
 import threading
 from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
-from config import CHROME_CDP_URL
+from config import CHROME_CDP_URL, CHROME_PROFILE_DIR
 from logger import log_exception
 
 logger = logging.getLogger("fb_downloader")
 
 class BrowserManager:
     """
-    Quản lý vòng đời kết nối trình duyệt Chrome qua CDP (Singleton).
+    Quản lý vòng đời kết nối trình duyệt Chrome qua CDP hoặc khởi chạy Chrome trực tiếp (Singleton).
     Chỉ khởi tạo trình duyệt 1 lần, chỉ tạo/đóng các trang (pages) cho mỗi Reel.
     """
     _instance = None
@@ -34,36 +35,66 @@ class BrowserManager:
 
     def start(self) -> bool:
         """
-        Kết nối tới trình duyệt Chrome qua CDP.
+        Kết nối tới trình duyệt Chrome qua CDP hoặc tự động mở instance Chrome mới nếu kết nối thất bại.
         Chỉ thực hiện một lần duy nhất. Nếu mất kết nối, tự động reconnect.
         """
         with self._lock:
-            if self.browser is not None:
-                # Kiểm tra kết nối còn sống hay không bằng cách gọi API của browser
+            if self.context is not None:
                 try:
-                    self.browser.contexts
+                    # Kiểm tra nhanh xem context còn hoạt động tốt
+                    test_page = self.context.new_page()
+                    test_page.close()
                     return True
                 except Exception:
-                    logger.warning("Browser disconnected. Trying reconnect...")
+                    logger.warning("Browser context is unresponsive. Trying to reconnect...")
                     self._cleanup_resources()
             
             logger.info("Starting Browser Manager")
+            
+            # Thử cách 1: Kết nối CDP
             try:
                 self.playwright = sync_playwright().start()
+                logger.info(f"Connecting to Chrome via CDP: {self.cdp_url}")
                 self.browser = self.playwright.chromium.connect_over_cdp(self.cdp_url)
-                self.context = self.browser.contexts[0]
-                logger.info("Connected to Chrome")
+                if self.browser.contexts:
+                    self.context = self.browser.contexts[0]
+                else:
+                    self.context = self.browser.new_context()
+                logger.info("Connected to Chrome via CDP successfully.")
                 return True
-            except Exception as e:
-                log_exception(logger, "Failed to connect to Chrome via CDP", e)
-                self._cleanup_resources()
-                return False
+            except Exception as cdp_err:
+                logger.warning(f"CDP connection refused/failed ({cdp_err}). Falling back to launching local Chrome...")
+                
+                # Thử cách 2: Tự khởi chạy Chrome cục bộ với profile riêng
+                try:
+                    chrome_path = shutil.which("google-chrome") or shutil.which("chrome") or shutil.which("google-chrome-stable")
+                    profile_path = str(CHROME_PROFILE_DIR)
+                    logger.info(f"Launching local Chrome with profile: {profile_path}")
+                    
+                    self.context = self.playwright.chromium.launch_persistent_context(
+                        user_data_dir=profile_path,
+                        executable_path=chrome_path,
+                        headless=False,  # Để hiển thị giao diện cho người dùng đăng nhập Facebook nếu cần
+                        args=[
+                            "--remote-debugging-port=9222",
+                            "--no-sandbox",
+                            "--disable-setuid-sandbox",
+                            "--disable-blink-features=AutomationControlled"
+                        ]
+                    )
+                    self.browser = self.context.browser
+                    logger.info("Launched local Chrome instance with persistent context successfully.")
+                    return True
+                except Exception as launch_err:
+                    log_exception(logger, "Failed to launch local Chrome instance too", launch_err)
+                    self._cleanup_resources()
+                    return False
 
     def create_page(self) -> Page:
         """Tạo trang (page) mới từ context trình duyệt."""
         if not self.context:
             if not self.start():
-                raise Exception("Cannot create Page: Browser Manager failed to connect to Chrome.")
+                raise Exception("Cannot create Page: Browser Manager failed to connect/launch Chrome.")
         
         try:
             logger.info("Creating Page")
@@ -80,6 +111,12 @@ class BrowserManager:
 
     def _cleanup_resources(self):
         """Dọn dẹp tài nguyên khi mất kết nối hoặc dừng chương trình."""
+        if self.context:
+            try:
+                self.context.close()
+            except:
+                pass
+            self.context = None
         if self.browser:
             try:
                 self.browser.close()
@@ -92,7 +129,6 @@ class BrowserManager:
             except:
                 pass
             self.playwright = None
-        self.context = None
 
     def stop(self):
         """Đóng kết nối trình duyệt khi kết thúc chương trình."""

@@ -12,6 +12,7 @@ COOKIES_FILE = BASE_DIR / "cookies.txt"
 LOG_FILE = BASE_DIR / "downloader.log"               # File log text thô
 DOWNLOAD_LOG_JSON = BASE_DIR / "download_log.json"    # File JSON lưu lịch sử download
 METADATA_FILE = BASE_DIR / "metadata.json"
+CHROME_PROFILE_DIR = BASE_DIR / "chrome_debug_profile" # Thư mục profile Chrome riêng biệt
 
 # Download Configuration
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
